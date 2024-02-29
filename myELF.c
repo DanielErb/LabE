@@ -199,7 +199,103 @@ void check_merge(keep_maps *keep_map){
         printf("You need to load 2 files\n");
         return;
     }
+    int num_of_symbols1 = find_num_of_symbolTables(keep_map, 0);
+    int num_of_symbols2 = find_num_of_symbolTables(keep_map, 1);
+    if(num_of_symbols1 != 1 ||  num_of_symbols2 !=1){
+        printf("feature not supported\n");
+        return;
+    }
+    int symbol_table_index_First = find_symbol_table(keep_map, 0);
+    int symbol_string_table_index_First = find_string_table(keep_map, 0);
+    Elf32_Ehdr *headerFirst = (Elf32_Ehdr *) keep_map->mmaps[0];
+    Elf32_Shdr *sectionFirst = (Elf32_Shdr * )(keep_map->mmaps[0] + headerFirst->e_shoff);
 
+    char *string_table_symbols =(char*) keep_map->mmaps[0] + sectionFirst[symbol_string_table_index_First].sh_offset;
+    Elf32_Sym *symbol_table_First = (Elf32_Sym * )(keep_map->mmaps[0] + sectionFirst[symbol_table_index_First].sh_offset);
+    int num_of_symbols_First = sectionFirst[symbol_table_index_First].sh_size / sectionFirst[symbol_table_index_First].sh_entsize;
+
+
+    int symbol_table_index_Second = find_symbol_table(keep_map, 1);
+    int symbol_string_table_index_Second = find_string_table(keep_map, 1);
+    Elf32_Ehdr *headerSecond = (Elf32_Ehdr *) keep_map->mmaps[1];
+    Elf32_Shdr *sectionSecond = (Elf32_Shdr * )(keep_map->mmaps[1] + headerSecond->e_shoff);
+
+    char *string_table_symbols_Second =(char*) keep_map->mmaps[1] + sectionSecond[symbol_string_table_index_Second].sh_offset;
+    Elf32_Sym *symbol_table_Second = (Elf32_Sym * )(keep_map->mmaps[1] + sectionSecond[symbol_table_index_Second].sh_offset);
+    int num_of_symbols_Second = sectionSecond[symbol_table_index_Second].sh_size / sectionSecond[symbol_table_index_Second].sh_entsize;
+
+    for(int i = 1; i<num_of_symbols_First; i++) {
+        if(symbol_table_First[i].st_name== 0){
+            continue;
+        }
+        char *symbol_name = string_table_symbols + symbol_table_First[i].st_name;
+        int exists_both = 0;
+        for (int j = 1; j < num_of_symbols_Second; j++) {
+            if(symbol_table_Second[j].st_name == 0){
+                continue;
+            }
+            if (strcmp(symbol_name, string_table_symbols_Second + symbol_table_Second[j].st_name) == 0) {
+                exists_both = 1;
+                if (symbol_table_First[i].st_shndx != SHN_UNDEF && symbol_table_Second[j].st_shndx != SHN_UNDEF) {
+                    printf("Error: symbol %s multiply defined\n", symbol_name);
+                } else if (symbol_table_First[i].st_shndx == SHN_UNDEF && symbol_table_Second[j].st_shndx == SHN_UNDEF) {
+                    printf("Error: symbol %s undefined\n", symbol_name);
+                } else {
+                    if (keep_map->degug_mode == 1) {
+                        if (symbol_table_First[i].st_shndx == SHN_UNDEF) {
+                            printf("Debug: symbol %s is defined in file %s\n", symbol_name, keep_map->file_names[1]);
+                        } else {
+                            printf("Debug: symbol %s is defined in file %s\n", symbol_name, keep_map->file_names[0]);
+                        }
+                    }
+                }
+            }
+        }
+        if(!exists_both && symbol_table_First[i].st_shndx == SHN_UNDEF){
+            printf("Error: symbol %s undefined\n", symbol_name);
+        }
+    }
+    for (int i = 1; i < num_of_symbols_Second; i++) {
+        if(symbol_table_Second[i].st_name == 0){
+            continue;
+        }
+        char *symbol_name = string_table_symbols_Second + symbol_table_Second[i].st_name;
+        int exists_both = 0;
+        for (int j = 1; j < num_of_symbols_First; j++) {
+            if(symbol_table_First[j].st_name == 0){
+                continue;
+            }
+            if (strcmp(symbol_name, string_table_symbols + symbol_table_First[j].st_name) == 0) {
+                exists_both = 1;
+            }
+        }
+        if(!exists_both && symbol_table_Second[i].st_shndx == SHN_UNDEF) {
+            printf("Error: symbol %s undefined\n", symbol_name);
+        }
+    }
+}
+
+int find_num_of_symbolTables(keep_maps *keep_map, int file_index){
+    int count = 0;
+    Elf32_Ehdr *header = (Elf32_Ehdr *) keep_map->mmaps[file_index];
+    Elf32_Shdr *section = (Elf32_Shdr *) (keep_map->mmaps[file_index] + header->e_shoff);
+    Elf32_Shdr *string_table_section = (Elf32_Shdr *) (section + header->e_shstrndx);
+    char *string_table = (char *) (keep_map->mmaps[file_index] + string_table_section->sh_offset);
+    for(int j = 0; j<header->e_shnum; j++){
+        if(section[j].sh_type == SHT_SYMTAB){
+            count += 1;
+        }
+    }
+    return count;
+
+}
+
+void quit(keep_maps *keep_map){
+    for (int i = 0; i < keep_map->num_of_files; i++){
+        munmap(keep_map->mmaps[i], keep_map->sizes[i]);
+    }
+    free(keep_map);
+    exit(0);
 }
 
 typedef struct fun_desc {
