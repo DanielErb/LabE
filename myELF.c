@@ -310,8 +310,10 @@ int main(int argc, char **argv) {
     fun_desc menu[] = {{"Toggle Debug Mode", debug_mode},
                        {"Examine ELF File", examine_ELF_file},
                        {"Print Section Names", print_section_names},
-                          {"Print Symbols", print_symbols},
-                       {"Quit", NULL}};
+                       {"Print Symbols", print_symbols},
+                          {"Check Merge", check_merge},
+                       {"Quit", quit},
+                       { NULL, NULL}};
 
     int menu_size = sizeof(menu) / sizeof(fun_desc) - 1;
     int option;
@@ -327,10 +329,10 @@ int main(int argc, char **argv) {
             menu[option].fun(keep_map);
         } else {
             printf("Not within bounds\n");
-            exit(0);
+            quit(keep_map);
         }
     }
-    free(keep_map);
+
     return 0;
 }
 
